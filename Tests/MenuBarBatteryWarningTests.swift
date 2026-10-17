@@ -20,6 +20,7 @@ enum MenuBarBatteryWarningTests {
         typealias MemoryPressure = MenuBarBatteryWarningTests.MemoryPressure
         typealias PowerReading = MenuBarBatteryWarningTests.PowerReading
         typealias ReviewDefaults = MenuBarBatteryWarningTests.ReviewDefaults
+        typealias MenuBarSpacingSupport = MenuBarBatteryWarningTests.MenuBarSpacingSupport
         typealias MenuBarMetricSpacing = MenuBarBatteryWarningTests.MenuBarMetricSpacing
         typealias MenuBarMetricAppearance = MenuBarBatteryWarningTests.MenuBarMetricAppearance
         static let blockImageCache = NSCache<NSString, NSImage>()
@@ -61,6 +62,9 @@ enum MenuBarBatteryWarningTests {
         defaults.set(true, forKey: DefaultsKey.menuBarCombineTemperatures)
         defaults.set(true, forKey: DefaultsKey.menuBarBatteryPercentage)
         segmentContracts(suite, defaults: defaults)
+        defaults.set(false, forKey: DefaultsKey.menuBarBatteryPercentage)
+        segmentContracts(suite, defaults: defaults)
+        defaults.set(true, forKey: DefaultsKey.menuBarBatteryPercentage)
         imageContracts(suite, defaults: defaults)
         percentageContracts(suite, defaults: defaults)
     }
@@ -75,7 +79,7 @@ enum MenuBarBatteryWarningTests {
     private static func warnings(_ segments: [MenuBarSegment]) -> [BatteryWarning] {
         segments.compactMap {
             switch $0 {
-            case let .metricBlock(_, _, _, _, _, warning), let .batteryBlock(_, _, warning, _): return warning
+            case let .metricBlock(_, _, _, _, _, warning), let .batteryBlock(_, _, _, warning, _): return warning
             default: return nil
             }
         }
@@ -86,18 +90,21 @@ enum MenuBarBatteryWarningTests {
             for metrics: [MenuBarMetric] in [[.battery, .batteryTemperature], [.batteryTemperature, .battery]] {
                 for (percent, warning): (Int, BatteryWarning) in [(10, .low), (15, .early), (25, .none)] {
                     let segments = Renderer.blockSegments(for: snapshot(percent), metrics: metrics, style: style)
-                    suite.expect(segments.count == 1 && warnings(segments) == [warning],
-                                 "a combined battery reading carries its warning in either order and block style")
-                    if case let .metricBlock(label, value, minimum, _, pressure, _)? = segments.first {
-                        suite.expect(label == "BAT" && value == "\(percent)% 35°" && minimum == "100% 999°" && pressure == nil,
-                                     "the combined warning preserves the reading, reserved width and absence of a pressure dot")
-                    } else { suite.expect(false, "charge and temperature remain one metric block") }
+                    suite.expect(warnings(segments) == [warning, .none],
+                                 "combined charge and temperature tint only the charge in either order and block style")
+                    if case let .batteryBlock(charge, _, _, _, _)? = segments.first {
+                        suite.expect(charge == percent, "combined readings retain the battery icon and its charge")
+                    } else { suite.expect(false, "combined readings must keep the battery icon") }
+                    if case let .metricBlock(label, value, minimum, _, pressure, _)? = segments.last {
+                        suite.expect(label == "BAT°C" && value == "35°" && minimum == "999°" && pressure == nil,
+                                     "combined readings retain an independent temperature label")
+                    } else { suite.expect(false, "combined readings must keep the temperature") }
                 }
             }
             for input in [snapshot(10, temperature: nil), snapshot(10)] {
                 let metrics: [MenuBarMetric] = input.batteryTemperature == nil ? [.battery, .batteryTemperature] : [.battery]
                 let segments = Renderer.blockSegments(for: input, metrics: metrics, style: style)
-                if case let .batteryBlock(_, _, warning, _)? = segments.first {
+                if case let .batteryBlock(_, _, _, warning, _)? = segments.first {
                     suite.expect(warning == .low, "an isolated battery or missing temperature keeps its warning")
                 } else { suite.expect(false, "charge without a combined temperature keeps the battery block") }
             }
@@ -111,11 +118,11 @@ enum MenuBarBatteryWarningTests {
         }
         for key in [DefaultsKey.notchLowBatteryTint, DefaultsKey.notchLowBatteryMenuBar] {
             defaults.set(false, forKey: key)
-            suite.expect(warnings(Renderer.blockSegments(for: snapshot(), metrics: [.battery, .batteryTemperature], style: .dense)) == [.none],
+            suite.expect(warnings(Renderer.blockSegments(for: snapshot(), metrics: [.battery, .batteryTemperature], style: .dense)) == [.none, .none],
                          "either disabled warning switch leaves combined readings untinted")
             defaults.set(true, forKey: key)
         }
-        suite.expect(warnings(Renderer.blockSegments(for: snapshot(10, plugged: true), metrics: [.battery, .batteryTemperature], style: .dense)) == [.none],
+        suite.expect(warnings(Renderer.blockSegments(for: snapshot(10, plugged: true), metrics: [.battery, .batteryTemperature], style: .dense)) == [.none, .none],
                      "external power clears a combined battery warning")
     }
 
@@ -177,8 +184,8 @@ enum MenuBarBatteryWarningTests {
             let iconOnly = image(snapshot(80))
             suite.expect(iconOnly.size.width < withPercentage.size.width && iconOnly !== withPercentage,
                          "hiding the percentage updates the cached image and its reserved width")
-            suite.expect(iconOnly === image(snapshot(80, plugged: true)),
-                         "paused charging uses the same charge fill without a bolt as an unplugged battery")
+            suite.expect(iconOnly !== image(snapshot(80, plugged: true)),
+                         "paused charging selects a distinct plug indicator")
             var charging = snapshot(80, plugged: true)
             charging.power?.isCharging = true
             suite.expect(image(charging) !== iconOnly,
@@ -186,7 +193,7 @@ enum MenuBarBatteryWarningTests {
             for metrics: [MenuBarMetric] in [[.battery, .batteryTemperature], [.batteryTemperature, .battery]] {
                 let segments = Renderer.blockSegments(for: snapshot(80), metrics: metrics, style: style)
                 let icons = segments.filter { if case .batteryBlock = $0 { return true }; return false }
-                suite.expect(segments.count == 2 && icons.count == 1,
+                suite.expect(warnings(segments).count == 2 && icons.count == 1,
                              "icon-only mode keeps battery and temperature separately visible in either order")
                 for segment in segments {
                     if case let .metricBlock(_, value, _, _, _, _) = segment {

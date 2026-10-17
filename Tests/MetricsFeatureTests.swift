@@ -328,8 +328,8 @@ enum MetricsFeatureTests {
                          "battery percentage toggle is localized for \(language)")
         }
 
-        func batteryBitmap(_ percent: Int, charging: Bool = false, text: Bool = false) -> NSBitmapImageRep {
-            let image = BatteryMenuBarImage.make(percent: percent, isCharging: charging,
+        func batteryBitmap(_ percent: Int, charging: Bool = false, plugged: Bool = false, text: Bool = false) -> NSBitmapImageRep {
+            let image = BatteryMenuBarImage.make(percent: percent, isCharging: charging, externalConnected: plugged,
                                                  showPercentage: text, readable: false, color: .white)
             let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil,
                                            pixelsWide: Int(image.size.width * 2),
@@ -369,6 +369,15 @@ enum MetricsFeatureTests {
                      "out-of-range charge readings clamp to the battery bounds")
         suite.expect(ink(batteryBitmap(50, charging: true)) != halfInk,
                      "active charging draws a bolt over the actual charge fill")
+        for percent in [0, 50, 100] {
+            let unplugged = batteryBitmap(percent).representation(using: .png, properties: [:])!
+            let paused = batteryBitmap(percent, plugged: true).representation(using: .png, properties: [:])!
+            let charging = batteryBitmap(percent, charging: true, plugged: true).representation(using: .png, properties: [:])!
+            suite.expect(unplugged != paused && paused != charging,
+                         "unplugged, paused/full and charging states have distinct rendered indicators")
+            suite.expect(charging == batteryBitmap(percent, charging: true).representation(using: .png, properties: [:])!,
+                         "active charging takes precedence even before the adapter flag catches up")
+        }
         suite.expect(emptyBattery.pixelsWide == fullBattery.pixelsWide,
                      "icon-only width stays fixed as charge changes")
         suite.expect(batteryBitmap(0, text: true).pixelsWide == batteryBitmap(100, text: true).pixelsWide,

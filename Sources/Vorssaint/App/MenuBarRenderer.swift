@@ -202,7 +202,7 @@ enum MenuBarSegment {
     case usageBarBlock(label: String, fraction: Double?, style: MenuBarBlockStyle, pressure: MemoryPressure?)
     case networkBlock(down: String, up: String, style: MenuBarBlockStyle)
     case diskActivityBlock(read: String, write: String, style: MenuBarBlockStyle)
-    case batteryBlock(percent: Int, isCharging: Bool,
+    case batteryBlock(percent: Int, isCharging: Bool, externalConnected: Bool,
                       warning: BatteryWarning = .none, style: MenuBarBlockStyle)
     case dot(MemoryPressure)
     case separator
@@ -499,35 +499,29 @@ enum MenuBarRenderer {
                                                       style: style)])
                 }
             case .battery, .batteryTemperature:
-                if combineTemperatures && UserDefaults.standard.bool(forKey: DefaultsKey.menuBarBatteryPercentage) {
+                if combineTemperatures {
                     guard !renderedBattery else { break }
                     renderedBattery = true
-                    let charge = enabled.contains(.battery)
-                        ? snapshot.power?.chargePercent.map { "\(max(0, min(100, $0)))%" }
-                        : nil
-                    let temperature = enabled.contains(.batteryTemperature)
-                        ? snapshot.batteryTemperature.map(temperatureCompact)
-                        : nil
-                    if charge != nil, temperature != nil,
-                       let value = combinedComponentValue(primary: charge, temperature: temperature) {
-                        groups.append([.metricBlock(label: "BAT",
-                                                    value: value,
-                                                    minimumValue: "100% 999°",
-                                                    style: style,
-                                                    pressure: nil,
-                                                    warning: batteryWarning(for: snapshot.power))])
-                    } else if let chargePercent = enabled.contains(.battery) ? snapshot.power?.chargePercent : nil {
-                        groups.append([.batteryBlock(percent: chargePercent,
-                                                     isCharging: snapshot.power?.isCharging ?? false,
-                                                     warning: batteryWarning(for: snapshot.power),
-                                                     style: style)])
-                    } else if let temperature {
-                        groups.append([.metricBlock(label: temperatureLabel("BAT"),
-                                                    value: temperature,
-                                                    minimumValue: "999°",
-                                                    style: style,
-                                                    pressure: nil)])
+                    var group: [MenuBarSegment] = []
+                    if enabled.contains(.battery), let charge = snapshot.power?.chargePercent {
+                        group.append(.batteryBlock(percent: charge,
+                                                   isCharging: snapshot.power?.isCharging ?? false,
+                                                   externalConnected: snapshot.power?.externalConnected ?? false,
+                                                   warning: batteryWarning(for: snapshot.power),
+                                                   style: style))
                     }
+                    if enabled.contains(.batteryTemperature), let temperature = snapshot.batteryTemperature {
+                        if !group.isEmpty {
+                            group.append(.text(MenuBarSpacingSupport.blockGlue(readableStyle: style == .readable,
+                                                                              spacing: MenuBarMetricSpacing.current)))
+                        }
+                        group.append(.metricBlock(label: temperatureLabel("BAT"),
+                                                  value: temperatureCompact(temperature),
+                                                  minimumValue: "999°",
+                                                  style: style,
+                                                  pressure: nil))
+                    }
+                    if !group.isEmpty { groups.append(group) }
                     break
                 }
                 guard metric == .battery else {
@@ -543,6 +537,7 @@ enum MenuBarRenderer {
                 if let charge = snapshot.power?.chargePercent {
                     groups.append([.batteryBlock(percent: charge,
                                                  isCharging: snapshot.power?.isCharging ?? false,
+                                                 externalConnected: snapshot.power?.externalConnected ?? false,
                                                  warning: batteryWarning(for: snapshot.power),
                                                  style: style)])
                 }
@@ -743,9 +738,10 @@ enum MenuBarRenderer {
                 result.append(networkBlockAttachment(down: down, up: up, style: style))
             case let .diskActivityBlock(read, write, style):
                 result.append(diskActivityBlockAttachment(read: read, write: write, style: style))
-            case let .batteryBlock(percent, isCharging, warning, style):
+            case let .batteryBlock(percent, isCharging, externalConnected, warning, style):
                 result.append(batteryBlockAttachment(percent: percent,
                                                      isCharging: isCharging,
+                                                     externalConnected: externalConnected,
                                                      warning: warning,
                                                      style: style))
             case let .dot(pressure):
@@ -852,10 +848,12 @@ enum MenuBarRenderer {
 
     private static func batteryBlockAttachment(percent: Int,
                                                isCharging: Bool,
+                                               externalConnected: Bool,
                                                warning: BatteryWarning,
                                                style: MenuBarBlockStyle) -> NSAttributedString {
         let image = batteryBlockImage(percent: percent,
                                       isCharging: isCharging,
+                                      externalConnected: externalConnected,
                                       warning: warning,
                                       style: style)
         let attachment = NSTextAttachment()
@@ -1082,15 +1080,17 @@ enum MenuBarRenderer {
 
     private static func batteryBlockImage(percent: Int,
                                           isCharging: Bool,
+                                          externalConnected: Bool,
                                           warning: BatteryWarning,
                                           style: MenuBarBlockStyle) -> NSImage {
         let showPercentage = UserDefaults.standard.bool(forKey: DefaultsKey.menuBarBatteryPercentage)
         let clampedPercent = max(0, min(100, percent))
-        let cacheKey = "battery|\(clampedPercent)|\(isCharging)|\(showPercentage)|\(warning)|\(style)" as NSString
+        let cacheKey = "battery|\(clampedPercent)|\(isCharging)|\(externalConnected)|\(showPercentage)|\(warning)|\(style)" as NSString
         if let cached = blockImageCache.object(forKey: cacheKey) { return cached }
 
         let image = BatteryMenuBarImage.make(percent: clampedPercent,
                                              isCharging: isCharging,
+                                             externalConnected: externalConnected,
                                              showPercentage: showPercentage,
                                              readable: style == .readable,
                                              color: nsColor(for: warning) ?? .labelColor)

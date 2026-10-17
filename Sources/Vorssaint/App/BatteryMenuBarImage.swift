@@ -8,6 +8,7 @@ import AppKit
 enum BatteryMenuBarImage {
     static func make(percent: Int,
                      isCharging: Bool,
+                     externalConnected: Bool,
                      showPercentage: Bool,
                      readable: Bool,
                      color: NSColor) -> NSImage {
@@ -41,28 +42,36 @@ enum BatteryMenuBarImage {
                 NSGraphicsContext.restoreGraphicsState()
             }
 
-            if isCharging {
-                // A transparent halo keeps the bolt legible across both the
-                // filled and empty portions without assuming a menu bar color.
-                let bolt = NSBezierPath()
+            if isCharging || externalConnected {
+                // A transparent halo keeps the power indicator legible across
+                // the charge fill without assuming a menu bar background color.
+                let indicator = NSBezierPath()
                 let cx = body.midX
                 let cy = body.midY
-                let h = iconSize.height * 0.43
-                bolt.move(to: NSPoint(x: cx + 1.5, y: cy + h))
-                bolt.line(to: NSPoint(x: cx - 3, y: cy - 0.5))
-                bolt.line(to: NSPoint(x: cx - 0.25, y: cy - 0.5))
-                bolt.line(to: NSPoint(x: cx - 1.5, y: cy - h))
-                bolt.line(to: NSPoint(x: cx + 3, y: cy + 0.5))
-                bolt.line(to: NSPoint(x: cx + 0.25, y: cy + 0.5))
-                bolt.close()
+                if isCharging {
+                    let h = iconSize.height * 0.43
+                    indicator.move(to: NSPoint(x: cx + 1.5, y: cy + h))
+                    indicator.line(to: NSPoint(x: cx - 3, y: cy - 0.5))
+                    indicator.line(to: NSPoint(x: cx - 0.25, y: cy - 0.5))
+                    indicator.line(to: NSPoint(x: cx - 1.5, y: cy - h))
+                    indicator.line(to: NSPoint(x: cx + 3, y: cy + 0.5))
+                    indicator.line(to: NSPoint(x: cx + 0.25, y: cy + 0.5))
+                    indicator.close()
+                } else {
+                    indicator.appendRoundedRect(NSRect(x: cx - 3, y: cy - 2, width: 6, height: 4),
+                                                xRadius: 1, yRadius: 1)
+                    indicator.appendRect(NSRect(x: cx - 2.25, y: cy + 1, width: 1.5, height: 3))
+                    indicator.appendRect(NSRect(x: cx + 0.75, y: cy + 1, width: 1.5, height: 3))
+                    indicator.appendRect(NSRect(x: cx - 0.75, y: cy - 4, width: 1.5, height: 3))
+                }
                 NSGraphicsContext.saveGraphicsState()
                 NSGraphicsContext.current?.compositingOperation = .destinationOut
-                bolt.lineWidth = 2
-                bolt.lineJoinStyle = .round
-                bolt.stroke()
+                indicator.lineWidth = 2
+                indicator.lineJoinStyle = .round
+                indicator.stroke()
                 NSGraphicsContext.restoreGraphicsState()
                 color.setFill()
-                bolt.fill()
+                indicator.fill()
             }
 
             if showPercentage {
