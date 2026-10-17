@@ -59,8 +59,10 @@ enum MenuBarBatteryWarningTests {
         defaults.set(10, forKey: DefaultsKey.notchLowBatteryThreshold)
         defaults.set(20, forKey: DefaultsKey.notchLowBatteryEarlyThreshold)
         defaults.set(true, forKey: DefaultsKey.menuBarCombineTemperatures)
+        defaults.set(true, forKey: DefaultsKey.menuBarBatteryPercentage)
         segmentContracts(suite, defaults: defaults)
         imageContracts(suite, defaults: defaults)
+        percentageContracts(suite, defaults: defaults)
     }
 
     private static func snapshot(_ percent: Int? = 10, temperature: Double? = 35, plugged: Bool = false) -> SystemSnapshot {
@@ -73,7 +75,7 @@ enum MenuBarBatteryWarningTests {
     private static func warnings(_ segments: [MenuBarSegment]) -> [BatteryWarning] {
         segments.compactMap {
             switch $0 {
-            case let .metricBlock(_, _, _, _, _, warning), let .batteryBlock(_, _, _, warning, _): return warning
+            case let .metricBlock(_, _, _, _, _, warning), let .batteryBlock(_, _, warning, _): return warning
             default: return nil
             }
         }
@@ -95,7 +97,7 @@ enum MenuBarBatteryWarningTests {
             for input in [snapshot(10, temperature: nil), snapshot(10)] {
                 let metrics: [MenuBarMetric] = input.batteryTemperature == nil ? [.battery, .batteryTemperature] : [.battery]
                 let segments = Renderer.blockSegments(for: input, metrics: metrics, style: style)
-                if case let .batteryBlock(_, _, _, warning, _)? = segments.first {
+                if case let .batteryBlock(_, _, warning, _)? = segments.first {
                     suite.expect(warning == .low, "an isolated battery or missing temperature keeps its warning")
                 } else { suite.expect(false, "charge without a combined temperature keeps the battery block") }
             }
@@ -158,6 +160,44 @@ enum MenuBarBatteryWarningTests {
                      && memory.map { matchingPixels($0, color: .systemYellow) > 0 && matchingPixels($0, color: .systemRed) == 0 } == true,
                      "other metric blocks retain the default warning and their existing pressure color")
         Renderer.overrideSegments = nil
+    }
+
+    private static func percentageContracts(_ suite: TestSuite, defaults: UserDefaults) {
+        defaults.set(false, forKey: DefaultsKey.notchLowBatteryTint)
+        defaults.set(true, forKey: DefaultsKey.menuBarCombineTemperatures)
+        for style in [MenuBarBlockStyle.readable, .dense] {
+            Renderer.style = style
+            func image(_ input: SystemSnapshot) -> NSImage {
+                let attributed = Renderer.attributed(for: input, metrics: [.battery])
+                return (attributed.attribute(.attachment, at: 0, effectiveRange: nil) as! NSTextAttachment).image!
+            }
+            defaults.set(true, forKey: DefaultsKey.menuBarBatteryPercentage)
+            let withPercentage = image(snapshot(80))
+            defaults.set(false, forKey: DefaultsKey.menuBarBatteryPercentage)
+            let iconOnly = image(snapshot(80))
+            suite.expect(iconOnly.size.width < withPercentage.size.width && iconOnly !== withPercentage,
+                         "hiding the percentage updates the cached image and its reserved width")
+            suite.expect(iconOnly === image(snapshot(80, plugged: true)),
+                         "paused charging uses the same charge fill without a bolt as an unplugged battery")
+            var charging = snapshot(80, plugged: true)
+            charging.power?.isCharging = true
+            suite.expect(image(charging) !== iconOnly,
+                         "active charging selects a separate image with a bolt")
+            for metrics: [MenuBarMetric] in [[.battery, .batteryTemperature], [.batteryTemperature, .battery]] {
+                let segments = Renderer.blockSegments(for: snapshot(80), metrics: metrics, style: style)
+                let icons = segments.filter { if case .batteryBlock = $0 { return true }; return false }
+                suite.expect(segments.count == 2 && icons.count == 1,
+                             "icon-only mode keeps battery and temperature separately visible in either order")
+                for segment in segments {
+                    if case let .metricBlock(_, value, _, _, _, _) = segment {
+                        suite.expect(!value.contains("%"), "combined temperature cannot bring back a hidden percentage")
+                    }
+                }
+            }
+            defaults.set(true, forKey: DefaultsKey.menuBarBatteryPercentage)
+            suite.expect(image(snapshot(80)) === withPercentage,
+                         "showing the percentage again restores its cached rendering")
+        }
     }
 
     /// Force the actual NSImage drawing closure into a bitmap and inspect its
