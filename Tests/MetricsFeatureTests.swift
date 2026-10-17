@@ -329,7 +329,7 @@ enum MetricsFeatureTests {
         }
 
         func batteryBitmap(_ percent: Int, charging: Bool = false, plugged: Bool = false, text: Bool = false) -> NSBitmapImageRep {
-            let image = BatteryMenuBarImage.make(percent: percent, isCharging: charging, externalConnected: plugged,
+            let image = BatteryMenuBarImage.make(percent: percent, showsBolt: charging, externalConnected: plugged,
                                                  showPercentage: text, readable: false, color: .white)
             let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil,
                                            pixelsWide: Int(image.size.width * 2),
@@ -374,7 +374,7 @@ enum MetricsFeatureTests {
             let paused = batteryBitmap(percent, plugged: true).representation(using: .png, properties: [:])!
             let charging = batteryBitmap(percent, charging: true, plugged: true).representation(using: .png, properties: [:])!
             suite.expect(unplugged != paused && paused != charging,
-                         "unplugged, paused/full and charging states have distinct rendered indicators")
+                         "unplugged, paused and charging states have distinct rendered indicators")
             suite.expect(charging == batteryBitmap(percent, charging: true).representation(using: .png, properties: [:])!,
                          "active charging takes precedence even before the adapter flag catches up")
         }

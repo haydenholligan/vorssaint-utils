@@ -203,9 +203,9 @@ struct MenuBarMetricsPreview: View {
             .frame(width: MenuBarRenderer.rateBlockWidth(style: style),
                    height: style == .readable ? 22 : 20,
                    alignment: .center)
-        case let .batteryBlock(percent, isCharging, externalConnected, warning, style):
+        case let .batteryBlock(percent, showsBolt, externalConnected, warning, style):
             Image(nsImage: BatteryMenuBarImage.make(percent: percent,
-                                                   isCharging: isCharging,
+                                                   showsBolt: showsBolt,
                                                    externalConnected: externalConnected,
                                                    showPercentage: batteryPercentage,
                                                    readable: style == .readable,

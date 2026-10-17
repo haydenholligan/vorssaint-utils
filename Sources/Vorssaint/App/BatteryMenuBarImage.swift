@@ -7,7 +7,7 @@ import AppKit
 /// size in each mode; hiding the percentage gives the charge fill more room.
 enum BatteryMenuBarImage {
     static func make(percent: Int,
-                     isCharging: Bool,
+                     showsBolt: Bool,
                      externalConnected: Bool,
                      showPercentage: Bool,
                      readable: Bool,
@@ -42,13 +42,13 @@ enum BatteryMenuBarImage {
                 NSGraphicsContext.restoreGraphicsState()
             }
 
-            if isCharging || externalConnected {
+            if showsBolt || externalConnected {
                 // A transparent halo keeps the power indicator legible across
                 // the charge fill without assuming a menu bar background color.
                 let indicator = NSBezierPath()
                 let cx = body.midX
                 let cy = body.midY
-                if isCharging {
+                if showsBolt {
                     let h = iconSize.height * 0.43
                     indicator.move(to: NSPoint(x: cx + 1.5, y: cy + h))
                     indicator.line(to: NSPoint(x: cx - 3, y: cy - 0.5))

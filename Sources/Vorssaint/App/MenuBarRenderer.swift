@@ -202,7 +202,7 @@ enum MenuBarSegment {
     case usageBarBlock(label: String, fraction: Double?, style: MenuBarBlockStyle, pressure: MemoryPressure?)
     case networkBlock(down: String, up: String, style: MenuBarBlockStyle)
     case diskActivityBlock(read: String, write: String, style: MenuBarBlockStyle)
-    case batteryBlock(percent: Int, isCharging: Bool, externalConnected: Bool,
+    case batteryBlock(percent: Int, showsBolt: Bool, externalConnected: Bool,
                       warning: BatteryWarning = .none, style: MenuBarBlockStyle)
     case dot(MemoryPressure)
     case separator
@@ -499,13 +499,16 @@ enum MenuBarRenderer {
                                                       style: style)])
                 }
             case .battery, .batteryTemperature:
+                // macOS keeps the bolt at full charge while connected to power.
+                let showsBolt = (snapshot.power?.isCharging ?? false)
+                    || ((snapshot.power?.externalConnected ?? false) && (snapshot.power?.isFullyCharged ?? false))
                 if combineTemperatures {
                     guard !renderedBattery else { break }
                     renderedBattery = true
                     var group: [MenuBarSegment] = []
                     if enabled.contains(.battery), let charge = snapshot.power?.chargePercent {
                         group.append(.batteryBlock(percent: charge,
-                                                   isCharging: snapshot.power?.isCharging ?? false,
+                                                   showsBolt: showsBolt,
                                                    externalConnected: snapshot.power?.externalConnected ?? false,
                                                    warning: batteryWarning(for: snapshot.power),
                                                    style: style))
@@ -536,7 +539,7 @@ enum MenuBarRenderer {
                 }
                 if let charge = snapshot.power?.chargePercent {
                     groups.append([.batteryBlock(percent: charge,
-                                                 isCharging: snapshot.power?.isCharging ?? false,
+                                                 showsBolt: showsBolt,
                                                  externalConnected: snapshot.power?.externalConnected ?? false,
                                                  warning: batteryWarning(for: snapshot.power),
                                                  style: style)])
@@ -738,9 +741,9 @@ enum MenuBarRenderer {
                 result.append(networkBlockAttachment(down: down, up: up, style: style))
             case let .diskActivityBlock(read, write, style):
                 result.append(diskActivityBlockAttachment(read: read, write: write, style: style))
-            case let .batteryBlock(percent, isCharging, externalConnected, warning, style):
+            case let .batteryBlock(percent, showsBolt, externalConnected, warning, style):
                 result.append(batteryBlockAttachment(percent: percent,
-                                                     isCharging: isCharging,
+                                                     showsBolt: showsBolt,
                                                      externalConnected: externalConnected,
                                                      warning: warning,
                                                      style: style))
@@ -847,12 +850,12 @@ enum MenuBarRenderer {
     }
 
     private static func batteryBlockAttachment(percent: Int,
-                                               isCharging: Bool,
+                                               showsBolt: Bool,
                                                externalConnected: Bool,
                                                warning: BatteryWarning,
                                                style: MenuBarBlockStyle) -> NSAttributedString {
         let image = batteryBlockImage(percent: percent,
-                                      isCharging: isCharging,
+                                      showsBolt: showsBolt,
                                       externalConnected: externalConnected,
                                       warning: warning,
                                       style: style)
@@ -1079,17 +1082,17 @@ enum MenuBarRenderer {
     }
 
     private static func batteryBlockImage(percent: Int,
-                                          isCharging: Bool,
+                                          showsBolt: Bool,
                                           externalConnected: Bool,
                                           warning: BatteryWarning,
                                           style: MenuBarBlockStyle) -> NSImage {
         let showPercentage = UserDefaults.standard.bool(forKey: DefaultsKey.menuBarBatteryPercentage)
         let clampedPercent = max(0, min(100, percent))
-        let cacheKey = "battery|\(clampedPercent)|\(isCharging)|\(externalConnected)|\(showPercentage)|\(warning)|\(style)" as NSString
+        let cacheKey = "battery|\(clampedPercent)|\(showsBolt)|\(externalConnected)|\(showPercentage)|\(warning)|\(style)" as NSString
         if let cached = blockImageCache.object(forKey: cacheKey) { return cached }
 
         let image = BatteryMenuBarImage.make(percent: clampedPercent,
-                                             isCharging: isCharging,
+                                             showsBolt: showsBolt,
                                              externalConnected: externalConnected,
                                              showPercentage: showPercentage,
                                              readable: style == .readable,

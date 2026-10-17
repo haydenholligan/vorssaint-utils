@@ -190,6 +190,27 @@ enum MenuBarBatteryWarningTests {
             charging.power?.isCharging = true
             suite.expect(image(charging) !== iconOnly,
                          "active charging selects a separate image with a bolt")
+            for combined in [false, true] {
+                defaults.set(combined, forKey: DefaultsKey.menuBarCombineTemperatures)
+                let metrics: [MenuBarMetric] = [.battery, .batteryTemperature]
+                var full = snapshot(100, plugged: true)
+                full.power?.isFullyCharged = true
+                if case let .batteryBlock(_, showsBolt, _, _, _)? = Renderer.blockSegments(for: full, metrics: metrics, style: style).first {
+                    suite.expect(showsBolt, "fully charged on AC shows the native-style bolt")
+                } else { suite.expect(false, "fully charged battery keeps its block") }
+                full.power?.externalConnected = false
+                if case let .batteryBlock(_, showsBolt, _, _, _)? = Renderer.blockSegments(for: full, metrics: metrics, style: style).first {
+                    suite.expect(!showsBolt, "full battery off AC has no bolt")
+                } else { suite.expect(false, "unplugged battery keeps its block") }
+            }
+            var full = snapshot(100, plugged: true)
+            let paused = image(full)
+            full.power?.isFullyCharged = true
+            let charged = image(full)
+            full.power?.isFullyCharged = false
+            full.power?.isCharging = true
+            suite.expect(charged !== paused && charged === image(full),
+                         "full-charge transition replaces the cached plug with the charging bolt")
             for metrics: [MenuBarMetric] in [[.battery, .batteryTemperature], [.batteryTemperature, .battery]] {
                 let segments = Renderer.blockSegments(for: snapshot(80), metrics: metrics, style: style)
                 let icons = segments.filter { if case .batteryBlock = $0 { return true }; return false }
