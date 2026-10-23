@@ -5,6 +5,7 @@ import AppKit
 
 /// Shared by the status item and its settings preview. The icon keeps a fixed
 /// size in each mode; hiding the percentage gives the charge fill more room.
+/// As in macOS, the percentage sits to the left of the icon.
 enum BatteryMenuBarImage {
     static func make(percent: Int,
                      showsBolt: Bool,
@@ -22,15 +23,17 @@ enum BatteryMenuBarImage {
         let textWidth = showPercentage ? ("100%" as NSString).size(withAttributes: attributes).width : 0
         let gap: CGFloat = showPercentage ? (readable ? 5 : 4) : 0
         let size = NSSize(width: ceil(iconSize.width + gap + textWidth), height: height)
+        // Whole-point offset keeps the outline on the same pixel grid in both modes.
+        let iconX = size.width - iconSize.width
         let image = NSImage(size: size, flipped: false) { _ in
             color.setFill()
             color.setStroke()
-            let body = NSRect(x: 0.75, y: (height - iconSize.height) / 2 + 0.75,
+            let body = NSRect(x: iconX + 0.75, y: (height - iconSize.height) / 2 + 0.75,
                               width: iconSize.width - 3.5, height: iconSize.height - 1.5)
             let outline = NSBezierPath(roundedRect: body, xRadius: 2, yRadius: 2)
             outline.lineWidth = 1.25
             outline.stroke()
-            NSBezierPath(roundedRect: NSRect(x: iconSize.width - 1.75, y: height / 2 - 2,
+            NSBezierPath(roundedRect: NSRect(x: iconX + iconSize.width - 1.75, y: height / 2 - 2,
                                             width: 1.5, height: 4), xRadius: 0.75, yRadius: 0.75).fill()
 
             let interior = body.insetBy(dx: 1.75, dy: 1.75)
@@ -75,7 +78,8 @@ enum BatteryMenuBarImage {
             }
 
             if showPercentage {
-                value.draw(at: NSPoint(x: iconSize.width + gap, y: (height - valueSize.height) / 2),
+                // Right-aligned so the gap to the icon stays fixed as digits change.
+                value.draw(at: NSPoint(x: iconX - gap - valueSize.width, y: (height - valueSize.height) / 2),
                            withAttributes: attributes)
             }
             return true

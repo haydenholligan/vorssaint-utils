@@ -387,12 +387,18 @@ enum MetricsFeatureTests {
 
         func iconRows(_ bitmap: NSBitmapImageRep) -> Int {
             (0..<bitmap.pixelsHigh).filter { y in
-                // Inspect only the shared left portion, excluding percentage text.
-                (0..<20).contains { x in bitmap.colorAt(x: x, y: y)!.alphaComponent > 0.5 }
+                // Inspect only the shared right portion, excluding percentage text.
+                (bitmap.pixelsWide - 20..<bitmap.pixelsWide).contains { x in bitmap.colorAt(x: x, y: y)!.alphaComponent > 0.5 }
             }.count
         }
         suite.expect(iconRows(halfBattery) > iconRows(batteryBitmap(50, text: true)),
                      "hiding the percentage makes the battery icon taller")
+        let shortReading = batteryBitmap(5, text: true)
+        let inkColumns = (0..<shortReading.pixelsWide).filter { x in
+            (0..<shortReading.pixelsHigh).contains { y in shortReading.colorAt(x: x, y: y)!.alphaComponent > 0.5 }
+        }
+        suite.expect(inkColumns.first! > 10 && inkColumns.last! >= shortReading.pixelsWide - 4,
+                     "the percentage sits left of the icon, as in macOS, right-aligned against it")
 
         expectEqual(BatteryPowerSupport.menuBarSymbol(percent: 80,
                                                       isCharging: false,
